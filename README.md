@@ -1,7 +1,7 @@
 # ComfyUI Universal Skills Director
 
 ブラウザから選んだMarkdown／JSONの制作仕様を読み込み、OpenAI Responses APIで単発プロンプトまたは
-複数Scene／Shotの制作計画を作るComfyUI／Floyo向けカスタムノードです。
+複数Scene／Shotの制作計画を作るComfyUI向けカスタムノードです。
 画像・動画・音声などの最終生成は対応する既存ノードへ任せます。
 
 Directorの基本フロー:
