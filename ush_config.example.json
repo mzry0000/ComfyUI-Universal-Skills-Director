@@ -1,0 +1,5 @@
+{
+  "openai_api_key": "",
+  "timeout_seconds": 120,
+  "specification_roots": []
+}
