@@ -57,13 +57,9 @@ def _source_path(source_path: object, *, require_absolute: bool) -> Path:
     elif isinstance(source_path, str):
         source_text = source_path
     else:
-        raise InvalidSpecificationError(
-            "Choose a .md or .json specification file path."
-        )
+        raise InvalidSpecificationError("Choose a .md or .json specification file path.")
     if not source_text:
-        raise InvalidSpecificationError(
-            "Choose a .md or .json specification file path."
-        )
+        raise InvalidSpecificationError("Choose a .md or .json specification file path.")
     if source_text != source_text.strip():
         raise InvalidSpecificationError(
             "Specification file paths cannot contain outer whitespace."
@@ -76,9 +72,7 @@ def _source_path(source_path: object, *, require_absolute: bool) -> Path:
     try:
         candidate = Path(source_text)
     except (OSError, ValueError):
-        raise InvalidSpecificationError(
-            "The specification file path is invalid."
-        ) from None
+        raise InvalidSpecificationError("The specification file path is invalid.") from None
     if candidate.anchor.startswith("\\\\"):
         raise InvalidSpecificationError(
             "UNC and Windows device specification paths are not supported."
@@ -130,9 +124,7 @@ def _resolve_allowed_roots(
 ) -> tuple[Path, ...]:
     """Resolve trusted directory boundaries supplied by the host integration."""
 
-    configured_roots = (
-        allowed_specification_roots() if allowed_roots is None else allowed_roots
-    )
+    configured_roots = allowed_specification_roots() if allowed_roots is None else allowed_roots
     if isinstance(configured_roots, (str, Path)) or not configured_roots:
         raise InvalidSpecificationError(
             "At least one allowed specification root directory is required."
@@ -248,9 +240,7 @@ def _decode_specification_bytes(raw: bytes, source_file: str) -> str:
         ) from None
     normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not normalized:
-        raise InvalidSpecificationError(
-            f"Specification {source_file!r} must not be empty."
-        )
+        raise InvalidSpecificationError(f"Specification {source_file!r} must not be empty.")
     return normalized
 
 
@@ -433,13 +423,10 @@ def load_specification_content(source_file: object, content: object) -> Specific
 
     display_name = _source_file_name(source_file)
     if not isinstance(content, str):
-        raise InvalidSpecificationError(
-            "Dropped specification content must be UTF-8 text."
-        )
+        raise InvalidSpecificationError("Dropped specification content must be UTF-8 text.")
     if len(content) > MAX_SPECIFICATION_BYTES:
         raise InvalidSpecificationError(
-            f"Specification {display_name!r} exceeds the "
-            f"{MAX_SPECIFICATION_BYTES}-byte limit."
+            f"Specification {display_name!r} exceeds the {MAX_SPECIFICATION_BYTES}-byte limit."
         )
     try:
         raw = content.encode("utf-8")
@@ -488,7 +475,9 @@ def normalize_specification(value: object) -> Specification:
     """Revalidate a JSON-safe ``USH_SPEC`` value at the Planner boundary."""
 
     if not isinstance(value, Mapping):
-        raise InvalidSpecificationError("Specification input must come from Load Specification.")
+        raise InvalidSpecificationError(
+            "Specification input must come from Load Specification."
+        )
     unknown = set(value) - _REQUIRED_FIELDS
     missing = _REQUIRED_FIELDS - set(value)
     if missing or unknown:
@@ -528,13 +517,10 @@ def normalize_specification(value: object) -> Specification:
         raise InvalidSpecificationError("Specification content must be non-empty text.")
     if len(content) > MAX_SPECIFICATION_BYTES:
         raise InvalidSpecificationError(
-            f"Specification {source_file!r} exceeds the "
-            f"{MAX_SPECIFICATION_BYTES}-byte limit."
+            f"Specification {source_file!r} exceeds the {MAX_SPECIFICATION_BYTES}-byte limit."
         )
     try:
-        normalized_content = _decode_specification_bytes(
-            content.encode("utf-8"), source_file
-        )
+        normalized_content = _decode_specification_bytes(content.encode("utf-8"), source_file)
     except UnicodeEncodeError:
         raise InvalidSpecificationError(
             "Specification content must be valid UTF-8 text."
@@ -567,9 +553,7 @@ def resolve_specification(
     normalized = normalize_specification(specification)
     if normalized["source_path"] is None:
         return normalized
-    resolved = load_specification(
-        normalized["source_path"], allowed_roots=allowed_roots
-    )
+    resolved = load_specification(normalized["source_path"], allowed_roots=allowed_roots)
     if resolved["source_file"] != normalized["source_file"]:
         raise InvalidSpecificationError(
             "Specification source_file does not match the selected disk file."

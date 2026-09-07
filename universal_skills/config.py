@@ -1,6 +1,8 @@
-"""Central V1 limits and supported UI choices."""
+"""Shared limits and supported UI/profile contracts."""
 
 from __future__ import annotations
+
+from typing import Literal, get_args
 
 API_KEY_ENV = "OPENAI_API_KEY"
 TIMEOUT_ENV = "USH_TIMEOUT_SECONDS"
@@ -18,15 +20,21 @@ MAX_SPECIFICATION_VERSION_CHARS = 100
 
 REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
 IMAGE_DETAIL_LEVELS = ("auto", "low", "high", "original")
-TARGET_PROFILES = (
+ImageTargetProfile = Literal[
     "gpt_image_2",
     "generic_image_generation",
     "generic_image_edit",
     "anime_diffusion",
     "photoreal_diffusion",
+    "custom",
+]
+TextTargetProfile = Literal["text_generation", "structured_json", "custom"]
+DirectorTargetProfile = Literal[ImageTargetProfile, TextTargetProfile]
+IMAGE_TARGETS = frozenset(get_args(ImageTargetProfile))
+TEXT_TARGETS = frozenset(get_args(TextTargetProfile))
+TARGET_PROFILES = (
+    *get_args(ImageTargetProfile)[:-1],
     "video_generation",
     "video_image_to_video",
-    "text_generation",
-    "structured_json",
-    "custom",
+    *get_args(TextTargetProfile),
 )

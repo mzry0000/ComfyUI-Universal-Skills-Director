@@ -53,9 +53,7 @@ def _first_image_as_float32(image: object, input_name: str) -> tuple[np.ndarray,
             f"{input_name}: IMAGE batch, height, and width must all be positive."
         )
     if channels != 3:
-        raise ImageEncodingError(
-            f"{input_name}: expected 3 RGB channels, got {channels}."
-        )
+        raise ImageEncodingError(f"{input_name}: expected 3 RGB channels, got {channels}.")
 
     try:
         value = image[0]  # Transfer and encode only the first batch item.
@@ -108,9 +106,7 @@ def encode_comfy_image(
 
     if not np.isfinite(frame).all():
         frame = np.nan_to_num(frame, nan=0.0, posinf=1.0, neginf=0.0)
-        warnings.append(
-            f"{input_name}: non-finite pixel values were replaced before encoding."
-        )
+        warnings.append(f"{input_name}: non-finite pixel values were replaced before encoding.")
 
     if np.any((frame < 0.0) | (frame > 1.0)):
         warnings.append(f"{input_name}: pixel values outside 0..1 were clamped.")
@@ -165,9 +161,7 @@ def encode_optional_images(
     """Encode connected named IMAGE inputs, skipping unconnected ``None`` values."""
 
     if len(images) > MAX_IMAGES:
-        raise ImageEncodingError(
-            f"At most {MAX_IMAGES} IMAGE inputs are supported in V1."
-        )
+        raise ImageEncodingError(f"At most {MAX_IMAGES} IMAGE inputs are supported in V1.")
 
     encoded: list[EncodedImage] = []
     warnings: list[str] = []

@@ -1,321 +1,144 @@
 # ComfyUI Universal Skills Director
 
-ブラウザから選んだMarkdown／JSONの制作仕様を読み込み、OpenAI Responses APIで単発プロンプトまたは
-複数Scene／Shotの制作計画を作るComfyUI向けカスタムノードです。
-画像・動画・音声などの最終生成は対応する既存ノードへ任せます。
+Reusable Markdown/JSON Skills → concise prompts for existing ComfyUI generators.
+v2は **Prompt Composerを中心にした小さな構成** です。画像自体は生成しません。
 
-Directorの基本フロー:
+## 基本の使い方
 
-```text
-Load Specification ──USH_SPEC──► Director: Plan Project
-                                      │
-                 USH_DIRECTOR_PLAN + USH_DIRECTOR_LEDGER
-                                      ▼
-                           Director: Select Work Item
-                         ┌────────────┴────────────┐
-                         ▼                         ▼
-             final_prompt: STRING       USH_DIRECTOR_WORK_ITEM
-                         │                         │
-              existing GPT Image 2         output_ref/status
-                 or media node                    │
-                         └────────────┬────────────┘
-                                      ▼
-                           Director: Record Result
-                              ├─ Save Session
-                              └─ Timeline Manifest
-```
+1. **Universal Skills: Load Skill**へ、手元のUTF-8 .md／.jsonをD&Dします。同じ領域をクリックして選ぶこともできます。本文previewは表示しません。
+2. **Universal Skills: Prompt Composer**へSkillを接続し、requestに今回作りたいものを書きます。
+3. 参照画像があればimage1〜image4へ接続します。
+4. final_promptを既存GPT Image 2等のprompt入力へ接続します。参照画像は生成ノードにも同じ順序で接続してください。
 
-`Select Work Item`の第1出力`final_prompt`はplain Python `str`、ComfyUI型は標準
-`STRING`です。image stageは既存GPT Image 2へ、video／audio／text stageは対応する
-標準`STRING` prompt入力を持つ下流ノードへ接続します。
-画像用STRINGはgoal、参照画像の単一role、変更／構図、正確な文字、実行時constraintsと
-Plan全体のglobal continuityだけへ簡潔化します。各入力画像の見た目を列挙する詳細preserve一覧は
-Plan JSONへ残します。Plannerのfield contractに従ってwarningsへ正しく分類された生成後QAやproofは、
-STRINGへ混ぜません。
-Plannerは各事実を`goal`、`required_changes`、`composition`、`text_elements`、`preserve`、
-`constraints`の担当fieldへ1回だけ置きます。Target Adapterもtrim後の完全一致が複数fieldにある場合は
-担当fieldを優先し、画像用のglobal continuityは`Continuity` 1行へまとめます。
-Directorでは選択stageの指示だけを`Goal`にし、project goalやscene progressionを再掲しません。
-audio／text stageにはvisual reference、visual composition、continuity、keyframe、subject／camera
-motionを渡しません。
+    Load Skill ──→ Prompt Composer ── final_prompt: STRING ──→ 既存の生成ノード
+                       ↑                                      ↑
+                  request・画像 ───── 同じ参照画像 ────────────┘
 
-## ノード
+通常はこの2ノードだけで使えます。最終文を13項目のPlanへ分解して再構成する旧方式は廃止しました。
+モデルが返すのはfinal_promptとwarningsだけです。warningsは最終文に混ぜません。
 
-### Universal Skills
+「画像で明白な見た目の再説明」は省きますが、「商品ラベルは変更禁止」のような明示条件は残す方針です。
+文章を文字数で切り詰めたり、host側で制約を機械的に削ったりしません。品質・短さは実案件で確認してください。
 
-- `Load Specification` — 単一領域のclick／D&Dで選んだ`.md`／`.json`本文を読み、`USH_SPEC`を返す。
-  worker上のtrusted pathを指定する互換fallbackも利用できる。
-- `Prompt Planner` — 1回のOpenAI呼び出しで単発planと`final_prompt: STRING`を返す。
+### 入力と出力
 
-### Universal Skills/Director
+| 入力 | 用途 |
+| --- | --- |
+| request | 今回の成果物と変更要求。例:「image1の商品を使った遠距離向けPOP什器のデザイン案を1枚。image2は売場の参考。商品ラベルは変更しない」 |
+| target_profile | 下流の生成先。GPT Image 2ならgpt_image_2。画像生成モデルをこのノード内で呼び出す設定ではありません |
+| generation_id | 同じ依頼で別案を作るときに数値を変更。通常のComfyUI cacheは維持します。再生成のseedではありません |
+| context（advanced） | 任意の補足。旧target_notes／additional_contextを統合した欄。不要なら空欄 |
+| model／reasoning_effort（advanced） | プロンプトを作るOpenAIモデルと推論設定。既定modelはgpt-5.6 |
+| image_detail（advanced） | OpenAIへ渡す参照画像のdetail |
+| max_output_tokens（advanced） | 推論分も含むAPI出力上限。reasoning_effortとは独立。既定8192 |
 
-- `Director: Plan Project` — strict Director Draftを取得し、署名済みPlanと全Work Itemが
-  `pending`の初期Ledgerを作る。既存Plan／Ledgerを同時接続するとrevisionを更新する。
-- `Director: Validate Plan` — schema、署名、Ledgerのstale状態を診断する。
-- `Director: Select Work Item` — `next_ready`、`exact`、`retry_failed`から1件を選ぶ。
-  `exact`ではscene／shot／variant／stageの4 IDがすべて必要。
-- `Director: Record Result` — status、attempt、opaque output refをLedgerへ記録する。
-- `Director: Load Session` — 固定session directoryからsnapshotを読む。
-- `Director: Save Session` — optimistic revision付きでsnapshotをatomic保存する。
-- `Director: Timeline Manifest` — 完了resultから編集ソフト非依存JSONを作る。
+出力はfinal_promptとwarningsの標準STRINGです。
+未接続のimage番号への言及はwarningsへ通知します（日本語に隣接するラベル・大文字にも対応）。文章自体は変更しません。
+target_profileは生成先のラベルであり、専用の書式変換器ではありません。細かな書式・スタイルはSkillまたはrequestで指定してください。
+画像入力はRGBのComfyUI IMAGE。各接続のbatchは先頭1枚を使用し、複数枚ならwarningを出します。
+OpenAIへ渡すpreviewは最大辺2048pxへ縮小します。元の画像は変更しません。
 
-Hosted Skill Set、Hosted shell、Skill ID、allowlist、upload/list toolは削除済みです。旧Hosted
-workflowとの互換性はありません。
+## インストールとAPI key
 
-## インストール
+ComfyUIのcustom_nodesへこのフォルダを置き、**ComfyUIが使用するPython**でrequirements.txtをインストールします。
+Python 3.10以上、ComfyUI側のNumPy／Pillow／torchを使用します。既存のtorchをこのノードのために再インストールする必要はありません。
 
-1. ComfyUIを停止します。旧`ComfyUI-Universal-Skill-Host-Handoff` folderがある場合は、まず
-   privateな`ush_config.json`を安全な場所へ退避してから旧folderを削除します。このfolderを
-   `ComfyUI/custom_nodes/ComfyUI-Universal-Skills-Director`へ配置し、必要なら設定だけを戻します。
-   旧folderと新folderを併存させると同じ`USH_*` node IDが二重登録されます。
-2. ComfyUIのPython環境で依存を導入します。
+    python -m pip install -r requirements.txt
 
-```powershell
-python -m pip install -r requirements.txt
-```
+ush_config.example.jsonを同じフォルダへush_config.jsonという名前でコピーし、privateな設定ファイルとして編集してください。
 
-3. `ush_config.example.json`を同じfolderの`ush_config.json`へコピーし、API keyを
-   設定します。
-
-```powershell
-Copy-Item ush_config.example.json ush_config.json
-```
-
-```json
-{
-  "openai_api_key": "sk-...",
-  "timeout_seconds": 120,
-  "specification_roots": []
-}
-```
-
-`ush_config.json`はカスタムノードfolder直下から自動で読み込まれます。設定後はComfyUIを
-再起動してください。この実ファイルは平文の秘密情報を含むため、共有、workflow保存、
-配布、commitをしないでください（`.gitignore`と配布除外の対象です）。
-OpenAI公式は環境変数またはkey management serviceからの読込を推奨しています。本JSON方式は
-ローカル／Floyo配置用の便宜機能なので、file ACLもoperatorだけが読めるようにしてください。
-
-環境変数を使う場合は次のように起動できます。`OPENAI_API_KEY`が設定されている場合は、
-安全な運用上の上書き手段として`ush_config.json`より常に優先されます。
-
-```powershell
-$env:OPENAI_API_KEY = "..."
-Set-Location C:\path\to\ComfyUI
-python main.py
-```
-
-`USH_TIMEOUT_SECONDS`または`ush_config.json`の`timeout_seconds`でOpenAI timeoutを変更
-できます。`specification_roots`は後述のtrusted path fallbackを使う場合だけ設定します。
-
-## SpecificationをclickまたはD&Dで読み込む
-
-標準経路では、`Load Specification`ノードの小さなfile領域をclickしてPC上の`.md`／`.json`を
-選ぶか、同じ領域へ1 fileだけD&Dします。独立した選択buttonはありません。読込後に表示するのは
-filename、`Embedded`状態、容量だけで、本文previewと内部保存fieldは表示しません。ブラウザはfileを
-UTF-8 textとして読み、basenameを`uploaded_filename`、本文を`uploaded_content`というbacking
-ComfyUI `STRING`へ設定します。この2 fieldを標準操作で直接編集する必要はありません。
-worker filesystemへの保存、worker pathの確認、専用upload routeは必要ありません。
-ComfyUI frontendには汎用file upload inputがまだないため、画像用`image_upload`／`/upload/image`は
-流用せず、公式JavaScript extension hookで追加した単一のclick／D&D領域だけがbrowser File APIを
-使います。
-
-受け付けるのはUTF-8の`.md`／`.json`、最大256 KiBです。JSONはobjectをrootにする必要があり、
-duplicate keyや非JSON数値も拒否します。filename、拡張子、サイズ、空本文などはブラウザ側だけで
-なくPython側でも再検証します。`ush_config.json`や`.env`をSpecificationとして読み込むことは
-できません。
-
-重要: browserで読み込んだ本文は、previewには表示しませんが`uploaded_content`としてworkflow JSONと
-ComfyUI／Floyoのprompt historyに
-保存されます。また、`Prompt Planner`または`Director: Plan Project`を実行するとoperator指示として
-OpenAIへ送信されます。API key、password、未共有の機密文書を読み込ませないでください。
-
-Floyoがカスタムノードの`WEB_DIRECTORY` JavaScriptを配信しない環境ではclick／D&D領域が表示されない
-可能性があります。その場合もadvanced入力を開き、`spec_file`を空のまま、basenameを
-`uploaded_filename`、file本文を`uploaded_content`へ手動pasteすれば同じin-memory経路を使えます。
-両fieldは必ずセットで指定します。
-
-### Trusted path fallback
-
-worker上のpathをoperatorが把握している環境だけ、advanced入力を開き、従来の`spec_file`を任意のfallbackとして
-利用できます。この場合は`uploaded_filename`と`uploaded_content`を空にし、許可root内にある
-`.md`／`.json`の絶対pathまたは相対pathを`spec_file`へ入力します。browser入力とpath入力の同時指定は
-曖昧さを避けるため拒否されます。
-
-相対pathは次の信頼rootを優先順に検索します。
-
-- ComfyUI input directory
-- `ush_config.json`の`specification_roots`でoperatorが許可したdirectory
-
-`specification_roots`の相対pathはカスタムノードfolderを基準にします。配下の
-subdirectoryは利用できますが、symlink escape、許可root外、UNC／Windows device path、
-`ush_config.json`、`.env`、hard link、非UTF-8、空file、256 KiB超のfileは拒否します。
-許可rootはoperatorが管理し、意図したSpecification以外を作成できる第三者の書込先を指定しないで
-ください。このpath経路はD&Dに必要な条件ではなく、Floyo workerのfolderへアクセスできない
-通常利用では設定不要です。
-
-input directoryまたは設定rootの直下ならbasename、subdirectoryなら
-`project-a/rules.md`のように指定できます。同名fileが複数rootにある場合は先に挙げたrootが
-優先されます。既存workflowとの互換用に入力名`spec_file`とnode IDは維持しています。
-
-Loaderは内容をJSON-safeな`USH_SPEC`へ正規化します。browser-embedded／manual paste経路の`source_path`は
-`null`で、Plannerは検証済みのin-memory snapshotを使います。trusted path経路だけはPlanner実行時に
-host-onlyの`source_path`を信頼rootへ再照合してdiskから再読込します。絶対pathはOpenAI、Plan、
-sessionへ渡さず、どちらの経路も公開metadataにはbasenameの`source_file`だけを含めます。
-
-## Prompt Plannerを使う
-
-Specificationは複数案件で再利用する固定制作規則、`request`は今回だけの制作条件です。
-`.md`または`.json`を`Load Specification`へD&Dし、その出力と必要な画像を`Prompt Planner`へ
-接続します。第1出力`final_prompt`を画像生成ノードなどの標準`STRING` prompt入力へ接続します。
-
-```text
-Load Specification.specification ─► Prompt Planner.specification
-Load Image ──────────────────────┬─► Prompt Planner.image1
-                                └─► downstream image reference
-Prompt Planner.final_prompt ──────► downstream prompt
-```
-
-画像はPlannerから下流へ自動転送されません。各`Load Image`出力をPlannerと下流ノードの対応する
-reference／edit画像入力へ分岐してください。
-
-## Directorを使う
-
-1. `Load Specification`を`Plan Project`へ接続する。
-2. request、`director_profile`、下流の`target_profile`を選ぶ。
-3. 必要なら`image1`〜`image4`を接続する。
-4. PlanとLedgerを`Select Work Item`へ接続し、通常は`next_ready`を選ぶ。
-5. 第1出力`final_prompt`を選択stageに対応する下流ノードへ接続する（image stageならGPT Image 2など）。
-6. 生成物を保存した後、その安定した参照文字列を`Record Result`の`output_ref`へ渡す。
-7. 更新Ledgerを`Save Session`で保存し、次回`Load Session`から再開する。
-
-再計画では、前回のPlanとLedgerを`Plan Project`の`previous_plan`／`previous_ledger`へ必ず
-セットで接続します。同じbriefのPlanだけを受け付け、revisionを1増やします。新旧で
-`item_id`と`shot_signature`がともに一致するWork Itemだけが状態とreceiptを引き継ぎ、
-変更されたWork Itemは`pending`へ戻ります。
-
-組み込みprofile:
-
-- `generic` — 汎用のScene／Shot分解
-- `music_video` — 音楽・歌詞timingとcoverage
-- `business_ad` — hook、demonstration、CTA、brand fact保持
-- `ugc_ad` — creator dialogueと自然な商品handling
-- `short_film` — cast、wardrobe、prop、screen directionの連続性
-
-profileは共通schemaへguidanceとwarningを重ねます。用途固有の制作規則は別Loaderを増やさず、
-選択した`USH_SPEC`へ記述します。
-
-## Plan、Ledger、Session
-
-Planはcreative documentで、ID、revision、plan/shot signatureを持ちます。Ledgerは別documentで、
-各Shot × Variant × Stageのstatus、attempt、prompt ID、workflow ID、output refsを保持します。
-古いPlanのWork ItemやLedgerはsignatureでstaleとして拒否されます。
-
-`USH_DIRECTOR_WORK_ITEM`は独立したJSON Schemaを持ちません。Director Planから決定論的に
-導出し、Record Resultなどの入口でplan ID、revision、plan／shot signatureと4つのcomponent
-IDを元Planへ照合します。
-
-`output_ref`は文字列として保存するだけで、nodeはそのpathやURLを開きません。Session保存は
-単純なJSON filenameだけを許可し、path traversal／symlinkを拒否します。更新には直前の
-`session_revision`が必要で、process内lockとOS-level cross-process lockの内側でtemp file、
-fsync、`os.replace`を使います。
-
-保存先は通常`ComfyUI/output/universal_skills_director/sessions/`です。ComfyUIの
-`folder_paths`をimportできない単体実行時だけpackage内`runtime/`へfallbackします。
-
-## Timeline Manifest
-
-Timeline nodeは成功、選択、またはassembled済みのvideo／audio resultから、stable track／clip
-ID、開始秒、source in、duration、`speed = 1.0`、`sync_lock`、nullableな決定論的
-`sync_group`、opaque asset refを持つversion付きJSONを返します。Shotの明示
-`start_seconds`はScene開始時刻からの相対値としてtimeline上の絶対時刻へ変換します。
-実mediaをprobe／編集しません。
-Velornなどへのimporterはこの中立manifestを境界として別実装できます。
-
-## 外部queue controller
-
-custom node自身はComfyUIの`/prompt`を呼びません。任意の外部CLIは、operatorが事前に作った
-ComfyUI API-format graph入りのstrict queue manifestを検証し、既定ではprompt本文を伏せた
-previewだけを表示します。CLIはSessionやPlanからmanifestを生成せず、manifest内の
-`plan_id`／`plan_revision`が実在するPlanと一致するかも照合しません。これらはoperatorが
-確認する監査metadataです。
-
-最小manifest例です。`prompt`にはComfyUIの「Save (API Format)」相当のgraphを入れ、例の
-class typeとinputは実際のworkflowへ置き換えてください。
-
-```json
-{
-  "schema_version": "1.0",
-  "queue_id": "queue_demo_001",
-  "plan_id": "dir_0123456789abcdef0123",
-  "plan_revision": 1,
-  "allowed_selectors": [
-    "scene-001/shot-001/variant-001/keyframe"
-  ],
-  "items": [
     {
-      "selector": "scene-001/shot-001/variant-001/keyframe",
-      "work_item_id": "scene-001-shot-001:scene-001-shot-001-variant-001:keyframe",
-      "prompt": {
-        "10": {
-          "class_type": "ExistingGPTImage2Node",
-          "inputs": {
-            "prompt": "Replace with Select Work Item final_prompt"
-          }
-        }
-      }
+      "openai_api_key": "YOUR_OPENAI_API_KEY",
+      "timeout_seconds": 120,
+      "specification_roots": [],
+      "enable_director": false
     }
-  ]
-}
-```
 
-以下のコマンドはnode package directoryから実行します。
+設定後にComfyUIを再起動します。OPENAI_API_KEY環境変数が設定されていれば、そちらが優先です。
+キーや設定ファイルをSkillに入れたり、workflowやGitHubへ公開したりしないでください。.gitignoreは配布に含めています。
+このノードのAPI keyは、下流の画像生成ノードには転送されません。
 
-```powershell
-python tools/director_queue.py director-queue.json
-python tools/director_queue.py director-queue.json --selector 'scene-001/shot-001/variant-001/keyframe'
-python tools/director_queue.py director-queue.json --selector 'scene-001/shot-001/variant-001/keyframe' --run --confirm
-python tools/director_queue.py director-queue.json --selector 'scene-001/shot-001/variant-001/keyframe' --run --confirm --wait
-```
+### Floyo等のhosted環境
 
-実送信はmanifest allowlistのexact selector、`--run`と`--confirm`の同時指定が必要です。
-`--timeout`は0より大きく300秒以下です。remote
-ComfyUIにはさらに`--allow-remote`が必要です。一度に選べるのは最大32件です。`--wait`は
-GET `/history/{prompt_id}`をbounded pollし、既定2秒間隔、各job最大600秒です。範囲は
-`--poll-interval`が0.1〜60秒、`--wait-timeout`が1〜3600秒です。wait timeoutになっても
-ComfyUI側の非同期jobはcancelされません。Director sidebar panelもbrowser内の簡易previewと
-CLI command copyだけを行い、HTTP送信やnode hookは行いません。panelで読めてもCLIのstrict
-validationで拒否される場合があり、実行可否についてはCLIを最終的な権威とします。
+D&Dしたファイルはブラウザで読み、本文をworkflowへ埋め込みます。workerのフォルダ操作・upload先パス指定は不要です。
+本文はworkflow／prompt historyに残り、Composer実行時に画像とともにOpenAIへ送信されます。Skillに秘密情報を入れないでください。
+共有workflowのSkill内容も実行前に確認してください。
 
-## 公式仕様の確認記録
+API keyのサーバー側設定は環境の提供者へ依頼してください。ノードにキーを直接埋め込む欄はありません。
+提供側でこの拡張のJavaScript配信が有効である必要があります。配信されない場合はadvanced入力にfilename／contentを貼るfallbackがあります。
+spec_fileは旧来のtrusted server path用のadvanced fallbackです。D&Dとの同時指定はできません。
+path fallbackのみ、ComfyUI inputまたはoperator設定specification_roots配下を読みます。
 
-2026-08-27に以下の公式資料を確認しました。
+## Director v2（任意）
 
-- OpenAI: [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)、
-  [Responsesへの移行](https://developers.openai.com/api/docs/guides/migrate-to-responses)、
-  [GPT-5.6 Sol model](https://developers.openai.com/api/docs/models/gpt-5.6-sol)、
-  [API認証](https://developers.openai.com/api/reference/overview)
-- ComfyUI: [V1 node properties](https://docs.comfy.org/custom-nodes/backend/server_overview)、
-  [datatypes](https://docs.comfy.org/custom-nodes/backend/datatypes)、
-  [flexible/custom inputs](https://docs.comfy.org/custom-nodes/backend/more_on_inputs)、
-  [JavaScript extensions](https://docs.comfy.org/custom-nodes/js/javascript_overview)、
-  [JavaScript hooks](https://docs.comfy.org/custom-nodes/js/javascript_hooks)、
-  [widget objects](https://docs.comfy.org/custom-nodes/js/javascript_objects_and_hijacking)、
-  [generic file upload issue](https://github.com/Comfy-Org/ComfyUI_frontend/issues/3461)、
-  [server routes](https://docs.comfy.org/development/comfyui-server/comms_routes)
+複数案・複数工程が必要な場合のみ、ush_config.jsonのenable_directorをtrueにして再起動します。
+無効時はDirectorをimportも登録もしません。通常の静止画1枚には不要です。
 
-## セキュリティ境界
+v2は **画像・テキスト工程を手動で選び、結果を保存して次へ進める補助機能** です。
+動画／音声の工程実行、自動queue、失敗の自動監視、Timelineは含みません。
+単発の動画用プロンプト作成には通常のPrompt Composerを使えます。
 
-- API keyをnode widget、workflow、payload、log、例外へ含めない。
-- operator Specificationを`instructions`、request/context/imageを`input`へ分離する。
-- OpenAIにはstrict JSON Schema、`store: false`、tool-free payloadを送る。
-- shell、Specification内script、任意commandを実行しない。
-- custom socketは接続補助とし、すべてのnode入口でschemaを再検証する。
-- browserで読み込んだSpecificationはworkerへ保存せず、専用backend upload routeも追加しない。
-- browserで読み込んだ本文はworkflow／historyへ保存され、Planner実行時にOpenAIへ送信されるため、秘密情報を
-  Specificationへ含めない。
-- Base64画像、Specification本文、prompt、HTTP error bodyを監査出力へ漏らさない。
+1. Plan ProjectでPlanとLedgerを作成し、Save Sessionで保存（初回expected_session_revision=-1）。
+2. Load Session → Select Work Itemで工程を選択。最初はmode=next_ready、stage_idは空欄で構いません。
+3. Selectのstarted_ledgerをSave Sessionで保存します。更新時はLoadからのsession_revisionを接続します。
+4. 生成用workflowで再読込し、同じstage_idをmode=resumeで選択。final_promptを生成ノードへ接続します。
+5. bindings_jsonに入力指定がある場合はResolve Image Input／Resolve Text Inputを使います。元画像を参照するslotには、Plan作成時の元画像も接続してください。
+6. 生成IMAGEをRecord Image、生成STRINGをRecord Textへ接続し、Selectのticketとstarted_ledgerも接続します。Record後のledgerをSave Sessionで保存します。
+7. 次回Load後、次の工程をnext_readyで選びます。
 
-## 互換性確認
+Select → Recordだけの同一workflowでも実行できますが、途中失敗に備えるなら上記の二段階保存を使ってください。
+**同じsessionへ書く複数のSave Sessionを1回のqueueに置かないでください。** 保存競合はエラーになり、自動mergeはしません。
 
-実OpenAI model権限、Floyo審査、ComfyUI上のload、第三者生成ノードとの実配線は、導入先の
-環境で確認してください。
+生成が失敗するとComfyUIは下流ノードを実行しません。その場合は保存済みのrunning工程をresumeし、
+生成ノードを実行しない別workflowでRecord Failureへfailed／cancelledと理由を渡して保存します。
+再試行はstage_idを明示してmode=retry。結果再送は同じattemptなら重複計上しません。
+完了済み工程を作り直す場合は再計画でその工程のpromptまたはseed等のparameterを変更します。
+
+Resolve Image Inputは保存した生成画像を実IMAGEへ戻します。
+Resolve Text Inputは実際の生成文をSTRINGとして返します。text1等は自動展開されないので、
+必要なら既存の文字列結合ノードでfinal_promptと組み合わせるか、生成ノードの別入力へ接続してください。
+parameters_jsonも自動適用されません。生成ノードのsize／seed等へ手動で反映してください。
+
+画像結果はComfyUI output/universal_skills_director_v2/resultsへ8-bit RGB PNGとして保存します。
+新しい画像結果は画素の同一性とPNGファイルの完全性を別々のhashで確認します。
+同じattemptへの同一画素の再Recordは、PNG圧縮条件が変わっても保存済み結果をそのまま再利用します。
+既存v2の画像結果も読込・再Recordできます。更新後に作成した新形式の画像結果は、更新前のv2では読めません。
+Record Imageは1画像／batch、最大64MP・128MiB、Record Textは最大32,000文字です。
+Directorの元画像も各入力1画像／batchに限定します。複数画像のbatchは事前に分割してください。
+台帳は同じv2フォルダのsessions配下へatomic保存します。
+session JSONだけで画像ファイルを持ち運ぶことはできません。hosted workerの保存領域の永続性は提供者に確認してください。
+同一sessionは単一operatorで運用してください。ComfyUIジョブの重複実行を排他制御するcontrollerではありません。
+
+### 再計画
+
+Load Sessionのplan／ledgerをPlan Projectのprevious_plan／previous_ledgerへ接続し、requestに変更要求を書きます。
+Skillと必要な元画像も接続します。前のPlanをAPIへ渡し、既存工程のIDを保つよう指示します。
+工程の並べ替えや説明変更だけなら完成結果を再利用し、prompt・参照・parameter・依存が変わると当該工程と下流を再生成対象にします。
+モデルが意図せずpromptも変更した場合は再利用しません。再計画結果のJSONを確認してください。
+
+## 旧版からの移行
+
+- Load Specificationは表示名をLoad Skillへ変更。内部IDとD&Dの保存形式は同じです。
+- 旧Prompt Plannerはdeprecatedな互換ノードとして残し、widget順と5つのSTRING出力順を維持します。
+  plan_json出力の内容はschema_version=2.0のfinal_prompt／warningsへ変更しました。旧13項目を解析するworkflowは修正が必要です。
+  新規workflowではPrompt Composerを使用してください。
+- Director v2は新しいノードID／socket／Plan／Ledger形式です。**v1 Director workflow・sessionは自動変換しません。**
+  旧sessionと生成物は旧版で開けるよう保管し、v2用Planを新しく作成してください。
+- queue CLI、queueパネル、Timeline、用途別Python profile、旧schemaは廃止しました。制作分野のルールはSkillで指定します。
+
+更新は旧フォルダへの上書きmergeではなく、ush_config.jsonと旧データをバックアップしたうえで、
+custom_nodes外へ旧フォルダを退避し、新フォルダへ置換してください。旧版と新版を同時にcustom_nodesへ置かないでください。
+これにより削除済みのJavaScript等が残ることを防ぎます。API keyはバックアップからprivate設定へ戻してください。
+
+## 開発・仕様
+
+公開ソースにはtests、最小の開発手順とオフラインCIを含めます。インストール用ZIPにはテスト／開発用資料／API key／runtimeを含めません。
+ソース版での検証手順はdocs/DEVELOPMENT.mdを参照してください。CIにAPI keyは不要です。
+モックテストで契約・状態遷移・保存処理を確認していますが、実ComfyUI／Floyoでの配線と実モデル品質は別途確認が必要です。
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Project specification](docs/PROJECT_SPEC.md)
+- [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- [ComfyUI node contract](https://docs.comfy.org/custom-nodes/backend/server_overview)
+
+License: [MIT](LICENSE)

@@ -1,44 +1,25 @@
-"""ComfyUI registration for local Specification and Director nodes."""
+"""Small default node set, with an explicit opt-in Director package."""
 
-from .director_nodes import (
-    DirectorLoadSessionNode,
-    DirectorPlanProjectNode,
-    DirectorRecordResultNode,
-    DirectorSaveSessionNode,
-    DirectorSelectWorkItemNode,
-    DirectorTimelineManifestNode,
-    DirectorValidatePlanNode,
-)
-from .nodes import (
-    LoadSpecificationNode,
-    PromptPlannerNode,
-)
-
+from .nodes import LoadSpecificationNode, PromptComposerNode, PromptPlannerNode
+from .universal_skills.local_config import load_local_config
 
 NODE_CLASS_MAPPINGS = {
     "USH_LoadSpecification": LoadSpecificationNode,
+    "USH_PromptComposer": PromptComposerNode,
     "USH_PromptPlanner": PromptPlannerNode,
-    "USH_DirectorPlanProject": DirectorPlanProjectNode,
-    "USH_DirectorValidatePlan": DirectorValidatePlanNode,
-    "USH_DirectorSelectWorkItem": DirectorSelectWorkItemNode,
-    "USH_DirectorRecordResult": DirectorRecordResultNode,
-    "USH_DirectorLoadSession": DirectorLoadSessionNode,
-    "USH_DirectorSaveSession": DirectorSaveSessionNode,
-    "USH_DirectorTimelineManifest": DirectorTimelineManifestNode,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "USH_LoadSpecification": "Universal Skills: Load Skill",
+    "USH_PromptComposer": "Universal Skills: Prompt Composer",
+    "USH_PromptPlanner": "Universal Skills: Prompt Planner (legacy)",
 }
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "USH_LoadSpecification": "Universal Skills: Load Specification",
-    "USH_PromptPlanner": "Universal Skills: Prompt Planner",
-    "USH_DirectorPlanProject": "Universal Skills Director: Plan Project",
-    "USH_DirectorValidatePlan": "Universal Skills Director: Validate Plan",
-    "USH_DirectorSelectWorkItem": "Universal Skills Director: Select Work Item",
-    "USH_DirectorRecordResult": "Universal Skills Director: Record Result",
-    "USH_DirectorLoadSession": "Universal Skills Director: Load Session",
-    "USH_DirectorSaveSession": "Universal Skills Director: Save Session",
-    "USH_DirectorTimelineManifest": "Universal Skills Director: Timeline Manifest",
-}
+if load_local_config().enable_director:
+    from .director_nodes import NODE_CLASS_MAPPINGS as DIRECTOR_CLASSES
+    from .director_nodes import NODE_DISPLAY_NAME_MAPPINGS as DIRECTOR_NAMES
+
+    NODE_CLASS_MAPPINGS.update(DIRECTOR_CLASSES)
+    NODE_DISPLAY_NAME_MAPPINGS.update(DIRECTOR_NAMES)
 
 WEB_DIRECTORY = "./web/js"
-
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

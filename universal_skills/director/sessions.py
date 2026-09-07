@@ -15,12 +15,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Mapping, cast
 
-from .director_core import validate_director_plan
-from .director_state import (
+from ..contracts import canonical_json, parse_strict_json
+from .core import validate_director_plan
+from .state import (
     DIRECTOR_STATE_SCHEMA_VERSION,
     DirectorStateError,
-    canonical_json,
-    parse_strict_json,
     utc_timestamp,
     validate_ledger_for_plan,
 )
@@ -199,8 +198,7 @@ class DirectorSessionStore:
                     current_revision = current["session_revision"]
                     if expected_session_revision == -1:
                         raise DirectorSessionConflictError(
-                            f"Director session {path.name!r} already exists; "
-                            "load it before saving."
+                            f"Director session {path.name!r} already exists; load it before saving."
                         )
                     if current_revision != expected_session_revision:
                         raise DirectorSessionConflictError(
@@ -232,9 +230,7 @@ class DirectorSessionStore:
                 # Reparse and validate the exact bytes before they can replace a
                 # valid snapshot.  This also gives the caller a fully detached
                 # result without a post-write validation failure window.
-                validated_snapshot = self._decode_snapshot(
-                    encoded, expected_file=path.name
-                )
+                validated_snapshot = self._decode_snapshot(encoded, expected_file=path.name)
                 self._atomic_replace(path, encoded)
                 return validated_snapshot
 
@@ -299,9 +295,13 @@ class DirectorSessionStore:
             try:
                 resolved = candidate.resolve(strict=True)
             except OSError as exc:
-                raise DirectorSessionError("Director session path could not be resolved.") from exc
+                raise DirectorSessionError(
+                    "Director session path could not be resolved."
+                ) from exc
             if resolved.parent != self.root:
-                raise DirectorSessionError("Director session resolves outside the session root.")
+                raise DirectorSessionError(
+                    "Director session resolves outside the session root."
+                )
             candidate = resolved
         elif must_exist:
             raise DirectorSessionError(f"Director session {filename!r} was not found.")
@@ -331,7 +331,7 @@ class DirectorSessionStore:
         except UnicodeDecodeError as exc:
             raise DirectorSessionError("Director session must be UTF-8 JSON.") from exc
         try:
-            value = parse_strict_json(text, label="Director session")
+            value = parse_strict_json(text)
         except DirectorStateError as exc:
             raise DirectorSessionError(str(exc)) from exc
         if not isinstance(value, dict):
@@ -349,9 +349,13 @@ class DirectorSessionStore:
                 "Director session has missing or unsupported top-level fields."
             )
         if value["schema_version"] != DIRECTOR_STATE_SCHEMA_VERSION:
-            raise DirectorSessionError("Director session schema_version must be '1.0'.")
+            raise DirectorSessionError(
+                "Director v2 requires a 2.0 session. v1 files are not modified; use the old release to open them."
+            )
         if value["session_file"] != expected_file:
-            raise DirectorSessionError("Director session filename metadata does not match the file.")
+            raise DirectorSessionError(
+                "Director session filename metadata does not match the file."
+            )
         revision = value["session_revision"]
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
             raise DirectorSessionError("Director session_revision must be a positive integer.")
@@ -391,7 +395,9 @@ class DirectorSessionStore:
         except DirectorSessionError:
             raise
         except OSError as exc:
-            raise DirectorSessionError("Director session could not be saved atomically.") from exc
+            raise DirectorSessionError(
+                "Director session could not be saved atomically."
+            ) from exc
         finally:
             if temporary is not None:
                 try:
@@ -474,7 +480,7 @@ def _prepare_bounded_root(raw_base: Path, raw_root: Path) -> tuple[Path, Path]:
 
     relative = Path(os.path.relpath(raw_root, raw_base))
     current = raw_base
-    for part in (() if str(relative) == "." else relative.parts):
+    for part in () if str(relative) == "." else relative.parts:
         current = current / part
         if not (current.exists() or current.is_symlink()):
             break
@@ -509,7 +515,9 @@ def _directory_identity(path: Path) -> tuple[int, int]:
     try:
         details = path.stat()
     except OSError as exc:
-        raise DirectorSessionError("Director session directory identity is unavailable.") from exc
+        raise DirectorSessionError(
+            "Director session directory identity is unavailable."
+        ) from exc
     if not stat.S_ISDIR(details.st_mode):
         raise DirectorSessionError("Director session boundary must be a directory.")
     return details.st_dev, details.st_ino
@@ -545,9 +553,7 @@ def _open_lock_file(path: Path, root: Path) -> int:
         descriptor = os.open(path, flags, 0o600)
         details = os.fstat(descriptor)
         if not stat.S_ISREG(details.st_mode):
-            raise DirectorSessionError(
-                "Director session process lock must be a regular file."
-            )
+            raise DirectorSessionError("Director session process lock must be a regular file.")
         resolved = path.resolve(strict=True)
         if resolved.parent != root:
             raise DirectorSessionError(

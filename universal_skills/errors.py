@@ -61,4 +61,3 @@ class OpenAIAPIError(UniversalSkillHostError):
 
 class OpenAIResponseFormatError(UniversalSkillHostError):
     """Raised when a completed response cannot be parsed as a valid plan."""
-

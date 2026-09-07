@@ -65,9 +65,7 @@ def _member(value: Any, name: str, default: Any = None) -> Any:
 def _items(value: Any) -> Sequence[Any]:
     """Return an SDK list-like field while excluding strings and mappings."""
 
-    if isinstance(value, Sequence) and not isinstance(
-        value, (str, bytes, bytearray)
-    ):
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return value
     return ()
 
@@ -96,15 +94,13 @@ def extract_completed_output_text(response: Any) -> str:
         reason = _safe_enum_token(
             _member(_member(response, "incomplete_details") or (), "reason")
         )
-        error_code = _safe_enum_token(
-            _member(_member(response, "error") or (), "code")
-        )
+        error_code = _safe_enum_token(_member(_member(response, "error") or (), "code"))
         if status_name == "incomplete" and reason == "max_output_tokens":
             raise OpenAIResponseFormatError(
                 "OpenAI stopped at the output token limit before completing the "
                 "plan (status: incomplete, reason: max_output_tokens). Reduce the "
-                "request size or raise reasoning_effort, which raises the output "
-                "token budget."
+                "request size or increase max_output_tokens. Reasoning tokens "
+                "also consume this budget."
             )
         details = [f"status: {status_name}"]
         if reason:
@@ -159,9 +155,7 @@ def _translated_error(error: Exception, sdk_module: Any) -> UniversalSkillHostEr
             "Could not connect to OpenAI. Check the network and retry."
         )
     if _matches_sdk_exception(error, sdk_module, "AuthenticationError"):
-        return OpenAIAuthenticationError(
-            f"OpenAI authentication failed. Check {API_KEY_ENV}."
-        )
+        return OpenAIAuthenticationError(f"OpenAI authentication failed. Check {API_KEY_ENV}.")
     if _matches_sdk_exception(error, sdk_module, "PermissionDeniedError"):
         return OpenAIPermissionError(
             "The OpenAI project lacks permission for the requested model or input."
@@ -283,6 +277,7 @@ class OpenAIResponsesClient:
         if timeout_seconds is not None and (
             isinstance(timeout_seconds, bool)
             or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
             or timeout_seconds <= 0
         ):
             raise OpenAIClientConfigurationError(
@@ -292,9 +287,7 @@ class OpenAIResponsesClient:
         self._sdk_module = sdk_module
         # None defers to USH_TIMEOUT_SECONDS or the package default at the
         # moment the default client is created.
-        self._timeout_seconds = (
-            None if timeout_seconds is None else float(timeout_seconds)
-        )
+        self._timeout_seconds = None if timeout_seconds is None else float(timeout_seconds)
 
     def _default_client(self) -> Any:
         api_key = _resolve_api_key()

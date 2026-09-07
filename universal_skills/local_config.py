@@ -21,7 +21,7 @@ CONFIG_FILENAME = "ush_config.json"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / CONFIG_FILENAME
 
 _ALLOWED_KEYS = frozenset(
-    {"openai_api_key", "timeout_seconds", "specification_roots"}
+    {"openai_api_key", "timeout_seconds", "specification_roots", "enable_director"}
 )
 _MAX_SPECIFICATION_ROOTS = 32
 _MAX_PATH_CHARS = 4096
@@ -34,6 +34,7 @@ class LocalConfig:
     api_key: Union[str, None] = None
     timeout_seconds: Union[float, None] = None
     specification_roots: tuple[str, ...] = ()
+    enable_director: bool = False
 
 
 _EMPTY_CONFIG = LocalConfig()
@@ -83,8 +84,7 @@ def load_local_config(path: Union[Path, None] = None) -> LocalConfig:
         )
     except json.JSONDecodeError as exc:
         raise LocalConfigError(
-            f"{CONFIG_FILENAME} is not valid JSON at line {exc.lineno}, "
-            f"column {exc.colno}."
+            f"{CONFIG_FILENAME} is not valid JSON at line {exc.lineno}, column {exc.colno}."
         ) from None
     except (_DuplicateKeyError, ValueError):
         raise LocalConfigError(
@@ -107,19 +107,22 @@ def load_local_config(path: Union[Path, None] = None) -> LocalConfig:
     return LocalConfig(
         api_key=_normalized_api_key(value.get("openai_api_key")),
         timeout_seconds=_normalized_timeout(value.get("timeout_seconds")),
-        specification_roots=_normalized_specification_roots(
-            value.get("specification_roots")
-        ),
+        specification_roots=_normalized_specification_roots(value.get("specification_roots")),
+        enable_director=_normalized_enable_director(value.get("enable_director", False)),
     )
+
+
+def _normalized_enable_director(value: object) -> bool:
+    if type(value) is not bool:
+        raise LocalConfigError("enable_director must be true or false.")
+    return value
 
 
 def _normalized_api_key(value: object) -> Union[str, None]:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise LocalConfigError(
-            f"openai_api_key in {CONFIG_FILENAME} must be a string."
-        )
+        raise LocalConfigError(f"openai_api_key in {CONFIG_FILENAME} must be a string.")
     normalized = value.strip()
     # Blank means "template placeholder left unfilled": treat as unset.
     return normalized or None

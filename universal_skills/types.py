@@ -15,6 +15,7 @@ class Specification(TypedDict):
     source_file: str
     source_path: str | None
 
+
 __all__ = [
     "Specification",
 ]

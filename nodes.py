@@ -10,10 +10,7 @@ from .universal_skills.config import (
 )
 from .universal_skills.errors import UniversalSkillHostError
 from .universal_skills.openai_client import OpenAIResponsesClient
-from .universal_skills.spec_planner import (
-    SpecificationPlanner,
-    SpecificationPlannerResult,
-)
+from .universal_skills.composer import PromptComposer
 from .universal_skills.specification import (
     load_specification_selection,
     specification_selection_fingerprint,
@@ -44,9 +41,7 @@ class LoadSpecificationNode:
                     "STRING",
                     {
                         "default": "",
-                        "placeholder": (
-                            "Trusted server path (leave blank when using D&D)"
-                        ),
+                        "placeholder": ("Trusted server path (leave blank when using D&D)"),
                         "dynamicPrompts": False,
                         "advanced": True,
                     },
@@ -106,7 +101,9 @@ class LoadSpecificationNode:
 
 
 class PromptPlannerNode:
-    """Apply one specification and expose five standard STRING outputs."""
+    """Legacy widget/output ordering; execution uses the v2 Composer."""
+
+    DEPRECATED = True
 
     CATEGORY = "Universal Skills"
     FUNCTION = "plan"
@@ -161,17 +158,14 @@ class PromptPlannerNode:
         image3: object | None = None,
         image4: object | None = None,
     ) -> tuple[str, str, str, str, str]:
-        result: SpecificationPlannerResult = SpecificationPlanner(
-            client=_SHARED_CLIENT
-        ).plan(
+        result = PromptComposer(client=_SHARED_CLIENT).compose(
             request=request,
             specification=specification,
             target_profile=target_profile,
             model=model,
             reasoning_effort=reasoning_effort,
             image_detail=image_detail,
-            target_notes=target_notes,
-            additional_context=additional_context,
+            context="\n\n".join(value for value in (target_notes, additional_context) if value),
             images=(
                 ("image1", image1),
                 ("image2", image2),
@@ -179,10 +173,88 @@ class PromptPlannerNode:
                 ("image4", image4),
             ),
         )
-        return result.as_node_tuple()
+        return result.legacy_tuple()
+
+
+class PromptComposerNode:
+    CATEGORY = "Universal Skills"
+    FUNCTION = "compose"
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("final_prompt", "warnings")
+    DESCRIPTION = "Compose a concise final prompt from a Skill, request and reference images. Connect the images to the generator too."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "specification": ("USH_SPEC", {"forceInput": True}),
+                "request": (
+                    "STRING",
+                    {"default": "", "multiline": True, "dynamicPrompts": False},
+                ),
+                "target_profile": (list(TARGET_PROFILES), {"default": "gpt_image_2"}),
+                "generation_id": ("INT", {"default": 0, "min": 0, "max": 2147483647}),
+                "context": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "dynamicPrompts": False,
+                        "advanced": True,
+                    },
+                ),
+                "model": ("STRING", {"default": DEFAULT_MODEL, "advanced": True}),
+                "reasoning_effort": (
+                    list(REASONING_EFFORTS),
+                    {"default": "medium", "advanced": True},
+                ),
+                "image_detail": (
+                    list(IMAGE_DETAIL_LEVELS),
+                    {"default": "auto", "advanced": True},
+                ),
+                "max_output_tokens": (
+                    "INT",
+                    {"default": 8192, "min": 1024, "max": 65536, "advanced": True},
+                ),
+            },
+            "optional": {f"image{i}": ("IMAGE",) for i in range(1, 5)},
+        }
+
+    def compose(
+        self,
+        specification,
+        request,
+        target_profile="gpt_image_2",
+        generation_id=0,
+        context="",
+        model=DEFAULT_MODEL,
+        reasoning_effort="medium",
+        image_detail="auto",
+        max_output_tokens=8192,
+        image1=None,
+        image2=None,
+        image3=None,
+        image4=None,
+    ):
+        result = PromptComposer(client=_SHARED_CLIENT).compose(
+            specification=specification,
+            request=request,
+            target_profile=target_profile,
+            context=context,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            image_detail=image_detail,
+            max_output_tokens=max_output_tokens,
+            generation_id=generation_id,
+            images=list(
+                zip(("image1", "image2", "image3", "image4"), (image1, image2, image3, image4))
+            ),
+        )
+        return result.final_prompt, "\n".join(result.warnings)
 
 
 __all__ = [
     "LoadSpecificationNode",
     "PromptPlannerNode",
+    "PromptComposerNode",
 ]
