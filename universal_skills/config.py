@@ -6,7 +6,7 @@ from typing import Literal, get_args
 
 API_KEY_ENV = "OPENAI_API_KEY"
 TIMEOUT_ENV = "USH_TIMEOUT_SECONDS"
-DEFAULT_MODEL = "gpt-5.6"
+DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
 MAX_IMAGES = 4

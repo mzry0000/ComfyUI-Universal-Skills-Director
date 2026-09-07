@@ -28,9 +28,12 @@ v2は **Prompt Composerを中心にした小さな構成** です。画像自体
 | target_profile | 下流の生成先。GPT Image 2ならgpt_image_2。画像生成モデルをこのノード内で呼び出す設定ではありません |
 | generation_id | 同じ依頼で別案を作るときに数値を変更。通常のComfyUI cacheは維持します。再生成のseedではありません |
 | context（advanced） | 任意の補足。旧target_notes／additional_contextを統合した欄。不要なら空欄 |
-| model／reasoning_effort（advanced） | プロンプトを作るOpenAIモデルと推論設定。既定modelはgpt-5.6 |
+| model／reasoning_effort（advanced） | プロンプトを作るOpenAIモデルと推論設定。既定modelはgpt-5.6-luna（Luna）。Solを使う場合はgpt-5.6-solを指定 |
 | image_detail（advanced） | OpenAIへ渡す参照画像のdetail |
 | max_output_tokens（advanced） | 推論分も含むAPI出力上限。reasoning_effortとは独立。既定8192 |
+
+Lunaの既定値は新規ノードに適用されます（旧Planner・任意のDirectorも共通）。
+保存済みworkflowのmodel値は自動変更しません。既存ノードもLunaにする場合はmodel欄をgpt-5.6-lunaへ変更してください。
 
 出力はfinal_promptとwarningsの標準STRINGです。
 未接続のimage番号への言及はwarningsへ通知します（日本語に隣接するラベル・大文字にも対応）。文章自体は変更しません。

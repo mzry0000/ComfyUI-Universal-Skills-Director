@@ -371,6 +371,7 @@ class SmokeHarnessTests(base.OfflineTest):
         def handler(request):
             payload = json.loads(request.content)
             calls.append(payload)
+            self.assertEqual(payload["model"], "gpt-5.6-luna")
             self.assertEqual(payload["max_output_tokens"], 2048)
             self.assertEqual(payload["reasoning"], {"effort": "low"})
             self.assertFalse(payload["store"])
@@ -408,7 +409,7 @@ class SmokeHarnessTests(base.OfflineTest):
                     "id": "resp_mock",
                     "object": "response",
                     "created_at": 0,
-                    "model": "gpt-5.6",
+                    "model": payload["model"],
                     "status": "completed",
                     "output": [
                         {

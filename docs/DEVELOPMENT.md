@@ -3,6 +3,19 @@
 The repository root remains the ComfyUI package root. `tests/`, `tools/`, this file,
 `AGENTS.md`, CI and development dependencies are source-only, not part of the installable ZIP.
 
+## Default model (2026-09-07)
+
+The shared default is `gpt-5.6-luna` for Composer, the legacy Planner wrapper and the
+optional Director. Explicit model values, including `gpt-5.6` and `gpt-5.6-sol`, are
+preserved; saved workflows are not rewritten. Restart ComfyUI after updating the code.
+
+The official [Luna model documentation](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+confirms image input, Responses, Structured Outputs and the existing reasoning choices.
+Only the default model changes: prompts, schemas, reasoning settings, output budgets
+and credentials are untouched. A prior three-case live Composer check demonstrated
+distance-specific instruction selection, not general quality or Director planning quality.
+Regression tests verify model selection with mocked API calls; they are not quality evals.
+
 ## Offline checks
 
 Use a separate development virtual environment, not ComfyUI's production environment:

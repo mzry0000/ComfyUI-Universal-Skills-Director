@@ -158,6 +158,37 @@ class ComposerTests(OfflineTest):
         )
         self.assertTrue(nodes.PromptPlannerNode.DEPRECATED)
 
+    def test_model_widgets_default_to_luna(self):
+        for node in (
+            nodes.PromptComposerNode,
+            nodes.PromptPlannerNode,
+            director_nodes.PlanProjectNode,
+        ):
+            with self.subTest(node=node.__name__):
+                widget_type, options = node.INPUT_TYPES()["required"]["model"]
+                self.assertEqual(widget_type, "STRING")
+                self.assertEqual(options["default"], "gpt-5.6-luna")
+
+    def test_node_model_defaults_and_explicit_sol_overrides_reach_api(self):
+        for owner, node, response in (
+            (nodes, nodes.PromptComposerNode, {"final_prompt": FINAL, "warnings": []}),
+            (nodes, nodes.PromptPlannerNode, {"final_prompt": FINAL, "warnings": []}),
+            (director_nodes, director_nodes.PlanProjectNode, draft()),
+        ):
+            for selected in (None, "gpt-5.6", "gpt-5.6-sol"):
+                with self.subTest(node=node.__name__, model=selected):
+                    client, sdk = mock_client(response)
+                    settings = {} if selected is None else {"model": selected}
+                    with patch.object(owner, "_SHARED_CLIENT", client):
+                        getattr(node(), node.FUNCTION)(
+                            specification=SKILL,
+                            request="Design POP",
+                            target_profile="gpt_image_2",
+                            **settings,
+                        )
+                    self.assertEqual(len(sdk.calls), 1)
+                    self.assertEqual(sdk.calls[0]["model"], selected or "gpt-5.6-luna")
+
     def test_python_source_syntax(self):
         for path in ROOT.rglob("*.py"):
             ast.parse(path.read_text(encoding="utf-8"))
@@ -842,7 +873,7 @@ class ActualSDKTests(OfflineTest):
                     "object": "response",
                     "created_at": 0,
                     "status": "completed",
-                    "model": "gpt-5.6",
+                    "model": calls[-1]["model"],
                     "output": [
                         {
                             "id": "msg_mock",
@@ -870,6 +901,7 @@ class ActualSDKTests(OfflineTest):
         )
         self.assertEqual(result.final_prompt, FINAL)
         self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["model"], "gpt-5.6-luna")
         self.assertFalse(calls[0]["store"])
         self.assertNotIn("tools", calls[0])
         self.assertEqual(
@@ -889,7 +921,7 @@ class ActualSDKTests(OfflineTest):
                     "object": "response",
                     "created_at": 0,
                     "status": "completed",
-                    "model": "gpt-5.6",
+                    "model": calls[-1]["model"],
                     "output": [
                         {
                             "id": "msg_mock",
@@ -913,6 +945,7 @@ class ActualSDKTests(OfflineTest):
             specification=SKILL,
         )
         self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["model"], "gpt-5.6-luna")
         self.assertEqual(
             calls[0]["text"]["format"]["schema"], contracts.api_schema(models.DirectorDraft)
         )
